@@ -71,7 +71,7 @@ class AnalyzeM2TS:
 
         FRAME_LENGTH = 188
         i = 0
-        self.logger.debug("Packet payload length: " + str(len(data)))
+        #self.logger.debug("Packet payload length: " + str(len(data)))
         while i < len(data) and i + FRAME_LENGTH <= len(data):
 
             frame = data[i:i+FRAME_LENGTH]
@@ -79,8 +79,8 @@ class AnalyzeM2TS:
 
             ts_pid, ts_afc, ts_cc = self.parse_frame(frame)
             #self.logger.debug("PID: 0x%x AFC: %s CC: %d" % (ts_pid, ts_afc, ts_cc))
-            self.logger.debug("Processing MPEG2TS frame at byte %d - PID: 0x%x CC: %d" % (
-                i - FRAME_LENGTH, ts_pid, ts_cc))
+#            self.logger.debug("Processing MPEG2TS frame at byte %d - PID: 0x%4x CC: %d" % (
+#                i - FRAME_LENGTH, ts_pid, ts_cc))
 
             if ts_pid not in group:
                 self.logger.debug("New TS PID: %x - init CC to: %d" % (ts_pid, ts_cc))
@@ -98,12 +98,11 @@ class AnalyzeM2TS:
 
             missing = ((pid['last_cc']+1) % 16) - ts_cc
             if missing > 0:
-                self.logger.error("AFC %x" % (ts_afc))
-                self.logger.error("Missing %d frame for PID 0x%x expected %d got %d" % (
+                self.logger.error("Missing %2d frame(s) for PID 0x%x expected %2d got %2d" % (
                     missing, ts_pid, (pid['last_cc'] % 16) + 1, ts_cc))
                 pid['missing_frames'] += missing
 
-            pid['last_cc'] += 1
+            pid['last_cc'] += 1 + missing
 
 
 
@@ -140,14 +139,18 @@ if __name__ == '__main__':
 
     if args.nic:
         print "Listening on:", args.nic
+        pc = pcap.pcap(args.nic)
         m = AnalyzeM2TS()
         n_packet = 0
         try:
-            for ts, pkt in pcap.pcap(args.nic):
+            for ts, pkt in pc:
                 m.process_packet(pkt)
                 n_packet += 1
                 if args.process_n and n_packet >= args.process_n:
                     break
+                if n_packet % 10000 == 0:
+                    print pc.stats()
+                    m.print_data()
         except KeyboardInterrupt:
             pass
         m.print_data()
