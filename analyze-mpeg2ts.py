@@ -2,6 +2,7 @@
 
 import dpkt
 import logging
+import pcap
 import socket
 
 
@@ -46,7 +47,7 @@ class AnalyzeM2TS:
 
     def process_packet(self, packet):
         self.total_packets += 1
-        eth = dpkt.ethernet.Ethernet(buf)
+        eth = dpkt.ethernet.Ethernet(packet)
         if eth.type != dpkt.ethernet.ETH_TYPE_IP6:
             return
         ip = eth.data
@@ -128,25 +129,41 @@ if __name__ == '__main__':
 
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('files', nargs='+', help='input file')
+    parser.add_argument('--file', action='append', help='input file')
     parser.add_argument('--process-n', type=int, help='process a maximum of N packets')
     parser.add_argument('--debug', action='store_true', help='debug')
+    parser.add_argument('--nic', help='nic')
     args = parser.parse_args()
 
     if args.debug:
         logger.setLevel(logging.DEBUG)
 
-    for filename in args.files:
-        print "Processing file:", filename
+    if args.nic:
+        print "Listening on:", args.nic
         m = AnalyzeM2TS()
-
-        f = file(filename, 'rb')
-        pcap = dpkt.pcap.Reader(f)
-
         n_packet = 0
-        for ts, buf in pcap:
-            m.process_packet(buf)
-            n_packet += 1
-            if args.process_n and n_packet > args.process_n:
-                break
+        try:
+            for ts, pkt in pcap.pcap(args.nic):
+                m.process_packet(pkt)
+                n_packet += 1
+                if args.process_n and n_packet >= args.process_n:
+                    break
+        except KeyboardInterrupt:
+            pass
         m.print_data()
+
+    if args.file:
+        for filename in args.file:
+            print "Processing file:", filename
+            m = AnalyzeM2TS()
+
+            f = file(filename, 'rb')
+            pf = dpkt.pcap.Reader(f)
+
+            n_packet = 0
+            for ts, pkt in pf:
+                m.process_packet(pkt)
+                n_packet += 1
+                if args.process_n and n_packet >= args.process_n:
+                    break
+            m.print_data()
